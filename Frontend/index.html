@@ -4,7 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sentiment Analyzer 🎭</title>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Raleway:wght@400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
+    <script src="index.js" defer></script>
 
 </head>
 <body>
@@ -12,12 +14,14 @@
         <h1>Sentiment Analyzer 🎭</h1>
         <p>Analyze YouTube comments and uncover the sentiment behind them! 😊😡😢</p>
     </div>
+    <div id="toast" class="toast"></div>
+
     
     <div class="main">
         <h2>🔍 Enter a YouTube Video URL Below:</h2>
         <div class="input-container">
-            <input type="text" placeholder="Paste the YouTube video URL here...">
-            <button>Get Sentiment! 🚀</button>
+            <input type="text" placeholder="Paste the YouTube video URL here..." id="video_url" >
+            <button id="get-sentiment">Get Sentiment! 🚀</button>
         </div>
     </div>
     
