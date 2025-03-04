@@ -36,5 +36,18 @@ get_sentiment_btn.addEventListener('click', (event)=>{
     }
     else{
         //fetch the results
+        fetch("https://sentiment-analyzer-5w4g.onrender.com/query", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+               yt_url : video_url
+            })
+        })
+        .then(response => response.json())  // Parse JSON response
+        .then(data => console.log("Success:", data))
+        .catch(error => console.error("Error:", error));
+        
     }
 })
