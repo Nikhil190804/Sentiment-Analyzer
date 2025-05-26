@@ -1,0 +1,100 @@
+body {
+    font-family: 'Raleway', sans-serif;
+    background-color: #f4f8fb;
+    color: #333;
+    margin: 0;
+    padding: 0;
+    text-align: center;
+}
+.header {
+    background-color: #e3f2fd;
+    padding: 40px 20px;
+    box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
+    font-family: 'Playfair Display', serif;
+}
+.header h1 {
+    margin: 0;
+    font-size: 2.5em;
+}
+.header p {
+    font-size: 1.2em;
+    margin-top: 10px;
+}
+
+
+.toast {
+    visibility: hidden;
+    min-width: 250px;
+    background-color: #ff4444; /* Red for error */
+    color: white;
+    text-align: center;
+    padding: 15px;
+    position: absolute;
+    left: 50%;
+    top: -50px;
+    transform: translateX(-50%);
+    border-radius: 5px;
+    box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2);
+    font-size: 1em;
+    opacity: 0;
+    transition: opacity 0.5s ease-in-out, top 0.5s ease-in-out;
+}
+.toast.show {
+    visibility: visible;
+    opacity: 1;
+    top: 10px;
+}
+
+
+
+.main {
+    margin: 50px auto;
+    width: 90%;
+    max-width: 600px;
+    background: #ffffff;
+    padding: 30px;
+    border-radius: 10px;
+    box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);
+    font-family: 'Raleway', sans-serif;
+}
+.main h2 {
+    font-size: 1.5em;
+    margin-bottom: 15px;
+    font-family: 'Playfair Display', serif;
+}
+.input-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+input {
+    width: 100%;
+    padding: 12px;
+    font-size: 1em;
+    border: 2px solid #90caf9;
+    border-radius: 5px;
+    outline: none;
+    text-align: center;
+}
+button {
+    margin-top: 15px;
+    padding: 12px 20px;
+    font-size: 1.2em;
+    color: white;
+    background: #42a5f5;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: 0.3s;
+}
+button:hover {
+    background: #1e88e5;
+}
+.footer {
+    margin-top: 50px;
+    padding: 15px;
+    background: #e3f2fd;
+    font-size: 1em;
+    box-shadow: 0px -4px 8px rgba(0, 0, 0, 0.1);
+    font-family: 'Raleway', sans-serif;
+}
