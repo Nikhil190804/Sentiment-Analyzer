@@ -4,10 +4,14 @@ import re
 from dotenv import load_dotenv
 import os
 import requests
+import tweetnlp
 app = Flask(__name__)
 CORS(app)
 
 load_dotenv()
+
+
+model=tweetnlp.load_model('sentiment')
 
 def extract_video_id_from_url(url):
     match = re.search(r"(?:v=|\/|youtu\.be\/|embed\/|shorts\/)([a-zA-Z0-9_-]{11})", url)
@@ -50,11 +54,12 @@ def query():
 
     response = requests.get(BASE_URL, params=params)
     data = response.json()
-    print(len(data))
-    print(data.keys())
-    print((data["items"][0]))
-    
-    return jsonify({"message": f"This is a sample API response for query! {video_id}"})
+    data=data["items"][0]
+    print(data)
+    comment = data["snippet"]["topLevelComment"]["snippet"]["textDisplay"]
+    res=model.sentiment(comment, return_probability=True)
+
+    return jsonify({"message": f"This is a sample API response for query! {video_id} {res}"})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)  
