@@ -7,7 +7,7 @@ import requests
 import tweetnlp
 from wordcloud import WordCloud,STOPWORDS
 import matplotlib.pyplot as plt
-from collections import defaultdict
+from collections import defaultdict,Counter
 
 app = Flask(__name__)
 CORS(app)
@@ -16,7 +16,10 @@ load_dotenv()
 API_KEY = os.getenv("YOUTUBE_API")
 BASE_URL = os.getenv("BASE_URL")
 
-model=tweetnlp.load_model('sentiment')
+SENTIMENT_MODEL=tweetnlp.load_model('sentiment')
+OFFENSIVE_MODEL = tweetnlp.load_model('offensive')
+EMOJI_MODEL = tweetnlp.load_model('emoji')
+
 
 def extract_video_id_from_url(url):
     match = re.search(r"(?:v=|\/|youtu\.be\/|embed\/|shorts\/)([a-zA-Z0-9_-]{11})", url)
@@ -54,10 +57,27 @@ def get_comments(video_id):
 
 def get_sentiment(ALL_COMMENTS):
     data={}
-    result=model.sentiment(ALL_COMMENTS, return_probability=True)
+    result=SENTIMENT_MODEL.sentiment(ALL_COMMENTS, return_probability=True)
     for output in range(len(result)):
         data[output]=result[output]
     return data
+
+
+def get_offensive_language_detection(ALL_COMMENTS):
+    data={}
+    result=OFFENSIVE_MODEL.offensive(ALL_COMMENTS, return_probability=True)
+    for output in range(len(result)):
+        data[output]=result[output]
+    return data
+
+
+def get_emoji(ALL_COMMENTS):
+    data={}
+    result=EMOJI_MODEL.emoji(ALL_COMMENTS)
+    for output in range(len(result)):
+        data[output]=result[output]
+    return data
+
 
 
 def get_wordcloud(ALL_COMMENTS):
@@ -78,7 +98,7 @@ def get_wordcloud(ALL_COMMENTS):
     plt.show()
 
     
-def get_things(ALL_COMMENTS,ALL_SENTIMENT_DATA):
+def get_sentiment_analysis(ALL_COMMENTS,ALL_SENTIMENT_DATA):
        
     sentiment_count = {'positive': 0, 'neutral': 0, 'negative': 0}
     sum_probabilities = {'positive': 0.0, 'neutral': 0.0, 'negative': 0.0}
@@ -124,6 +144,82 @@ def get_things(ALL_COMMENTS,ALL_SENTIMENT_DATA):
     plt.title('Sentiment Distribution')
     plt.show()
 
+
+def get_offensive_language_analysis(ALL_COMMENTS, ALL_OFFENSIVE_DATA):
+    total = len(ALL_OFFENSIVE_DATA)
+    
+    offensive_comments = {i: v for i, v in ALL_OFFENSIVE_DATA.items() if v['label'] == 'offensive'}
+    non_offensive_comments = {i: v for i, v in ALL_OFFENSIVE_DATA.items() if v['label'] == 'non-offensive'}
+
+    offensive_percent = (len(offensive_comments) / total) * 100
+    non_offensive_percent = 100 - offensive_percent
+
+    top_offensive = sorted(
+        [(idx, data['probability']['offensive'], ALL_COMMENTS[idx])
+         for idx, data in offensive_comments.items()],
+        key=lambda x: x[1], reverse=True
+    )[:5]
+
+    print(f"Total comments analyzed: {total}")
+    print(f"Offensive comments: {len(offensive_comments)} ({offensive_percent:.2f}%)")
+    print(f"Non-Offensive comments: {len(non_offensive_comments)} ({non_offensive_percent:.2f}%)\n")
+
+    print("Top 5 Offensive Comments:")
+    for idx, prob, text in top_offensive:
+        print(f"{text}  -->  {prob:.2%} offensive")
+
+    labels = ['Offensive', 'Non-Offensive']
+    sizes = [offensive_percent, non_offensive_percent]
+    colors = ['#f39c12', '#3498db']
+    explode = (0.1, 0)
+
+    plt.figure(figsize=(7, 7))
+    plt.pie(sizes, explode=explode, labels=labels, colors=colors,
+            autopct='%1.1f%%', shadow=True, startangle=140, textprops={'fontsize': 14})
+    plt.title('Offensive Language Detection Results', fontsize=16)
+    plt.axis('equal')
+    plt.tight_layout()
+    plt.show()
+
+
+
+
+
+def get_emoji_analysis(ALL_COMMENTS, ALL_EMOJI_DATA):
+    
+    emojis = [v['label'] for v in ALL_EMOJI_DATA.values()]
+    total = len(emojis)
+    emoji_counts = Counter(emojis)
+    
+    sorted_emojis = emoji_counts.most_common()
+
+    print(f"Total comments analyzed: {total}")
+    print("\nTop 5 Most Common Emojis:")
+    for emoji, count in sorted_emojis[:5]:
+        print(f"{emoji}  →  {count} comments ({(count / total) * 100:.2f}%)")
+
+    
+    labels = [f"{emoji}" for emoji, _ in sorted_emojis[:8]]
+    sizes = [count for _, count in sorted_emojis[:8]]
+    explode = [0.1 if i == 0 else 0 for i in range(len(labels))]
+
+    colors = plt.cm.tab20.colors[:len(labels)]  
+
+    plt.figure(figsize=(8, 8))
+    plt.pie(sizes, labels=labels, explode=explode, autopct='%1.1f%%',
+            startangle=140, shadow=True, colors=colors, textprops={'fontsize': 14})
+    plt.title("Emoji Sentiment Representation from Comments", fontsize=16)
+    plt.axis('equal')
+    plt.tight_layout()
+    plt.show()
+
+    
+    dominant_emoji = sorted_emojis[0][0] if sorted_emojis else None
+    print(f"\n🎯 Dominant Emoji for This Video: {dominant_emoji}")
+
+
+
+
 @app.route('/')
 def home():
     return "<h1>Hello, Flask is running on Render!</h1>"
@@ -144,14 +240,16 @@ def query():
         return jsonify({"error": "Invalid URL"}), 400
     
     ALL_COMMENTS = get_comments(video_id)
-    ALL_SENTIMENT_DATA=get_sentiment(ALL_COMMENTS)
+    #ALL_SENTIMENT_DATA=get_sentiment(ALL_COMMENTS)
+    #ALL_OFFENSIVE_SPEECH_DATA = get_offensive_language_detection(ALL_COMMENTS)
+    ALL_EMOJI_DETECTION_DATA=get_emoji(ALL_COMMENTS)
 
-    for i in range(5):
-        print(ALL_SENTIMENT_DATA[i])
 
     get_wordcloud(ALL_COMMENTS)
 
-    get_things(ALL_COMMENTS,ALL_SENTIMENT_DATA)
+    #get_sentiment_analysis(ALL_COMMENTS,ALL_SENTIMENT_DATA)
+    #get_offensive_language_analysis(ALL_COMMENTS,ALL_OFFENSIVE_SPEECH_DATA)
+    get_emoji_analysis(ALL_COMMENTS,ALL_EMOJI_DETECTION_DATA)
 
 
 
