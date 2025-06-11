@@ -1,0 +1,16 @@
+negative:-
+https://www.youtube.com/watch?v=KM1OouzGxPM
+
+
+positive:-
+https://www.youtube.com/watch?v=QsoqmK3gpzY
+
+
+Branch A – Summarization Chain: Retrieve all embedded comments and run a single LangChain summarization prompt to produce a “What viewers are saying” paragraph for each sentiment, plus overall insights.
+
+template=(
+        "You are an insights generator. "
+        "Summarize the following {sentiment} comments into a concise paragraph:\n\n"
+        "{comments_text}\n\n"
+        "Also highlight 2 key takeaways."
+    )
