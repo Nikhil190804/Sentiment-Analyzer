@@ -8,11 +8,16 @@ import tweetnlp
 from wordcloud import WordCloud,STOPWORDS
 import matplotlib.pyplot as plt
 from collections import defaultdict,Counter
+from sentence_transformers import SentenceTransformer
+from sklearn.cluster import KMeans
+import numpy as np
+import math
+from langchain_huggingface import ChatHuggingFace, HuggingFaceEndpoint
+from langchain_core.messages import SystemMessage,HumanMessage,AIMessage
 
 app = Flask(__name__)
 CORS(app)
-
-load_dotenv()
+load_dotenv(override=True)
 API_KEY = os.getenv("YOUTUBE_API")
 BASE_URL = os.getenv("BASE_URL")
 
@@ -20,6 +25,11 @@ SENTIMENT_MODEL=tweetnlp.load_model('sentiment')
 OFFENSIVE_MODEL = tweetnlp.load_model('offensive')
 EMOJI_MODEL = tweetnlp.load_model('emoji')
 
+llm = HuggingFaceEndpoint(
+    repo_id="meta-llama/Llama-3.3-70B-Instruct"
+)
+chat_model = ChatHuggingFace(llm=llm)
+CHAT_HISTORY=[]
 
 def extract_video_id_from_url(url):
     match = re.search(r"(?:v=|\/|youtu\.be\/|embed\/|shorts\/)([a-zA-Z0-9_-]{11})", url)
@@ -130,11 +140,15 @@ def get_sentiment_analysis(ALL_COMMENTS,ALL_SENTIMENT_DATA):
     for sentiment, total_prob in sum_probabilities.items():
         print(f"{sentiment.capitalize()}: {total_prob/total:.2f}")
 
-    
+    top_5_by_sentiment = {}
     print("\nTop 5 High-Confidence Comments per Sentiment:")
     for sentiment, comment_tuples in comment_by_sentiment.items():
         print(f"\n{sentiment.capitalize()} comments:")
         sorted_comments = sorted(comment_tuples, key=lambda x: x[1], reverse=True)
+        top_comments=[]
+        for comment,ind in sorted_comments[:5]:
+            top_comments.append(comment)
+        top_5_by_sentiment[sentiment] = top_comments  
         for comment, confidence in sorted_comments[:5]:
             print(f"- ({confidence:.2f}) {comment}")
 
@@ -143,6 +157,8 @@ def get_sentiment_analysis(ALL_COMMENTS,ALL_SENTIMENT_DATA):
     plt.pie(sentiment_count.values(), labels=sentiment_count.keys(), autopct='%1.1f%%', startangle=140, colors=['green', 'grey', 'red'])
     plt.title('Sentiment Distribution')
     plt.show()
+
+    return top_5_by_sentiment
 
 
 def get_offensive_language_analysis(ALL_COMMENTS, ALL_OFFENSIVE_DATA):
@@ -183,8 +199,6 @@ def get_offensive_language_analysis(ALL_COMMENTS, ALL_OFFENSIVE_DATA):
 
 
 
-
-
 def get_emoji_analysis(ALL_COMMENTS, ALL_EMOJI_DATA):
     
     emojis = [v['label'] for v in ALL_EMOJI_DATA.values()]
@@ -218,6 +232,81 @@ def get_emoji_analysis(ALL_COMMENTS, ALL_EMOJI_DATA):
     print(f"\n🎯 Dominant Emoji for This Video: {dominant_emoji}")
 
 
+def get_representative_comments(ALL_COMMENTS, num_clusters=None):
+    if not ALL_COMMENTS or len(ALL_COMMENTS) < 2:
+        return ALL_COMMENTS
+
+    if num_clusters is None:
+        num_clusters = min(20, max(2, int(math.sqrt(len(ALL_COMMENTS)))))
+
+    if len(ALL_COMMENTS) < num_clusters:
+        return ALL_COMMENTS
+
+    model = SentenceTransformer('all-MiniLM-L6-v2')
+    embeddings = model.encode(ALL_COMMENTS)
+
+    kmeans = KMeans(n_clusters=num_clusters, random_state=42)
+    kmeans.fit(embeddings)
+    labels = kmeans.labels_
+
+    representative_comments = []
+    for cluster_id in range(num_clusters):
+        cluster_indices = np.where(labels == cluster_id)[0]
+        cluster_embeddings = embeddings[cluster_indices]
+        centroid = kmeans.cluster_centers_[cluster_id]
+
+        distances = np.linalg.norm(cluster_embeddings - centroid, axis=1)
+        closest_idx = cluster_indices[np.argmin(distances)]
+
+        representative_comments.append(ALL_COMMENTS[closest_idx])
+
+    return representative_comments
+
+
+def comments_summarizer_by_llm(COMMENTS_DATA):
+
+    QUERY = ""
+
+    for sentiment, comments in COMMENTS_DATA.items():
+        comments_text = "\n".join(f"- {comment}" for comment in comments)
+        QUERY += (
+            f"\nSentiment: {sentiment.capitalize()}\n"
+            f"Comments:\n{comments_text}\n"
+        )
+
+    PROMPT_TEMPLATE = (
+        "You are an expert insights generator.\n"
+        "Your task is to analyze viewer feedback based on their sentiment. "
+        "You will be given three sets of comments: Positive, Negative, and Neutral.\n"
+        "For each sentiment group:\n"
+        "- Summarize the general sentiment in a short, engaging paragraph.\n"
+        "- Provide two key takeaways or observations based on the comments.\n\n"
+        "Finally, provide 1-2 overall insights that reflect the broader themes across all comments.\n\n"
+        f"{QUERY}\n\n"
+        "Format:\n"
+        "## Positive Insights\n"
+        "[Paragraph]\n"
+        "- Key Takeaway 1\n"
+        "- Key Takeaway 2\n\n"
+        "## Negative Insights\n"
+        "[Paragraph]\n"
+        "- Key Takeaway 1\n"
+        "- Key Takeaway 2\n\n"
+        "## Neutral Insights\n"
+        "[Paragraph]\n"
+        "- Key Takeaway 1\n"
+        "- Key Takeaway 2\n\n"
+        "## Overall Insights\n"
+        "[What viewers are saying in general]"
+    )
+
+    messages = [
+        SystemMessage(content="You are a helpful AI."),
+        HumanMessage(content=PROMPT_TEMPLATE)
+    ]
+
+    response = chat_model.invoke(messages)
+    return response.content
 
 
 @app.route('/')
@@ -227,6 +316,18 @@ def home():
 @app.route('/test', methods=['GET'])
 def test():
     return jsonify({"message": "This is a sample API response!"})
+
+
+@app.route('/question',methods=['POST'])
+def chatbot():
+    data = request.get_json()  
+    if not data:
+        return jsonify({"error": "Invalid JSON data"}), 400
+    question = data.get("question")
+    CHAT_HISTORY.append(HumanMessage(content=question))
+    response = chat_model.invoke(CHAT_HISTORY).content
+    CHAT_HISTORY.append(AIMessage(content=response))
+    return jsonify({"answer": response}), 200
 
 
 @app.route('/query', methods=['POST'])
@@ -240,18 +341,42 @@ def query():
         return jsonify({"error": "Invalid URL"}), 400
     
     ALL_COMMENTS = get_comments(video_id)
+    REPRESENTATIVE_COMMENTS=get_representative_comments(ALL_COMMENTS)
+    REPRESENTATIVE_COMMENTS_ALL = ""
+    for comment in REPRESENTATIVE_COMMENTS:
+        REPRESENTATIVE_COMMENTS_ALL+="-  "+comment+"\n"
+
     #ALL_SENTIMENT_DATA=get_sentiment(ALL_COMMENTS)
     #ALL_OFFENSIVE_SPEECH_DATA = get_offensive_language_detection(ALL_COMMENTS)
-    ALL_EMOJI_DETECTION_DATA=get_emoji(ALL_COMMENTS)
+    #ALL_EMOJI_DETECTION_DATA=get_emoji(ALL_COMMENTS)
 
 
-    get_wordcloud(ALL_COMMENTS)
+    #get_wordcloud(ALL_COMMENTS)
 
-    #get_sentiment_analysis(ALL_COMMENTS,ALL_SENTIMENT_DATA)
+    #TOP_5_SENTIMENT_DATA=get_sentiment_analysis(ALL_COMMENTS,ALL_SENTIMENT_DATA)
+    #comments_summarizer_by_llm(TOP_5_SENTIMENT_DATA)
     #get_offensive_language_analysis(ALL_COMMENTS,ALL_OFFENSIVE_SPEECH_DATA)
-    get_emoji_analysis(ALL_COMMENTS,ALL_EMOJI_DETECTION_DATA)
+    #get_emoji_analysis(ALL_COMMENTS,ALL_EMOJI_DETECTION_DATA)
 
+    system_message_new = SystemMessage(
+        content= f"""
+        You are a helpful and grounded assistant. You have been given a list of representative viewer comments from a video. This means the list captures the most relevant and commonly discussed topics, but does not contain every comment.
 
+        You must answer user questions strictly based on the provided representative comments. Do not rely on outside knowledge, assumptions, or hallucinations.
+
+        If the answer to the user's question cannot be reasonably inferred from the given comments, clearly respond with something like:
+        - "There is no mention of that in the comments."
+        - "I couldn't find any information related to that topic."
+        - "The provided comments do not cover that subject."
+
+        Before answering, you should carefully review all representative comments to identify patterns or relevant details. If multiple perspectives appear, mention both. Always keep your answers grounded and evidence-based.
+
+        Representative Comments:
+        {REPRESENTATIVE_COMMENTS_ALL}
+
+        """
+    )
+    CHAT_HISTORY.append(system_message_new)
 
     return jsonify({"message": f"This is a sample API response for query! {video_id}"})
 
