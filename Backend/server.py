@@ -14,6 +14,8 @@ import numpy as np
 import math
 from langchain_huggingface import ChatHuggingFace, HuggingFaceEndpoint
 from langchain_core.messages import SystemMessage,HumanMessage,AIMessage
+import io
+import base64
 
 app = Flask(__name__)
 CORS(app)
@@ -89,7 +91,6 @@ def get_emoji(ALL_COMMENTS):
     return data
 
 
-
 def get_wordcloud(ALL_COMMENTS):
     combined_comments = " ".join(ALL_COMMENTS)
     wordcloud = WordCloud(
@@ -101,69 +102,82 @@ def get_wordcloud(ALL_COMMENTS):
             colormap='plasma'
         ).generate(combined_comments)
     
-    plt.figure(figsize=(10, 5))
-    plt.imshow(wordcloud, interpolation='bilinear')
-    plt.axis("off")
+    fig, ax = plt.subplots(figsize=(10, 5))
+    ax.imshow(wordcloud, interpolation='bilinear')
+    ax.axis("off")
     plt.tight_layout()
-    plt.show()
 
-    
-def get_sentiment_analysis(ALL_COMMENTS,ALL_SENTIMENT_DATA):
-       
+    buf = io.BytesIO()
+    plt.savefig(buf, format='PNG')
+    plt.close(fig)
+    buf.seek(0)
+    img_base64 = base64.b64encode(buf.read()).decode('utf-8')
+
+    return img_base64
+
+
+def get_sentiment_analysis(ALL_COMMENTS, ALL_SENTIMENT_DATA):
     sentiment_count = {'positive': 0, 'neutral': 0, 'negative': 0}
     sum_probabilities = {'positive': 0.0, 'neutral': 0.0, 'negative': 0.0}
-
-    
     comment_by_sentiment = defaultdict(list)
+
+    output_lines = []
 
     for i, result in ALL_SENTIMENT_DATA.items():
         label = result['label']
         sentiment_count[label] += 1
-
-       
         for s in ['positive', 'neutral', 'negative']:
             sum_probabilities[s] += result['probability'][s]
-
-        
         confidence = result['probability'][label]
         comment_by_sentiment[label].append((ALL_COMMENTS[i], confidence))
 
     total = len(ALL_COMMENTS)
 
-    
-    print("Sentiment Distribution:")
+    output_lines.append("Sentiment Distribution:")
     for sentiment, count in sentiment_count.items():
-        print(f"{sentiment.capitalize()}: {count} ({(count/total)*100:.2f}%)")
+        output_lines.append(f"{sentiment.capitalize()}: {count} ({(count/total)*100:.2f}%)")
 
-    
-    print("\nAverage Sentiment Probabilities:")
+    output_lines.append("\nAverage Sentiment Probabilities:")
     for sentiment, total_prob in sum_probabilities.items():
-        print(f"{sentiment.capitalize()}: {total_prob/total:.2f}")
+        output_lines.append(f"{sentiment.capitalize()}: {total_prob/total:.2f}")
 
+    output_lines.append("\nTop 5 High-Confidence Comments per Sentiment:")
     top_5_by_sentiment = {}
-    print("\nTop 5 High-Confidence Comments per Sentiment:")
     for sentiment, comment_tuples in comment_by_sentiment.items():
-        print(f"\n{sentiment.capitalize()} comments:")
+        output_lines.append(f"\n{sentiment.capitalize()} comments:")
         sorted_comments = sorted(comment_tuples, key=lambda x: x[1], reverse=True)
-        top_comments=[]
-        for comment,ind in sorted_comments[:5]:
-            top_comments.append(comment)
-        top_5_by_sentiment[sentiment] = top_comments  
+        top_comments = []
         for comment, confidence in sorted_comments[:5]:
-            print(f"- ({confidence:.2f}) {comment}")
+            output_lines.append(f"- ({confidence:.2f}) {comment}")
+            top_comments.append(comment)
+        top_5_by_sentiment[sentiment] = top_comments
 
-    
-    plt.figure(figsize=(6, 6))
-    plt.pie(sentiment_count.values(), labels=sentiment_count.keys(), autopct='%1.1f%%', startangle=140, colors=['green', 'grey', 'red'])
-    plt.title('Sentiment Distribution')
-    plt.show()
+    fig, ax = plt.subplots(figsize=(6, 6))
+    ax.pie(
+        sentiment_count.values(),
+        labels=sentiment_count.keys(),
+        autopct='%1.1f%%',
+        startangle=140,
+        colors=['green', 'grey', 'red']
+    )
+    ax.set_title('Sentiment Distribution')
 
-    return top_5_by_sentiment
+    buf = io.BytesIO()
+    plt.savefig(buf, format='PNG')
+    plt.close(fig)
+    buf.seek(0)
+    pie_chart_base64 = base64.b64encode(buf.read()).decode('utf-8')
+
+    return {
+        "print_output": "\n".join(output_lines),
+        "top_5_comments": top_5_by_sentiment,
+        "pie_chart": pie_chart_base64
+    }
 
 
 def get_offensive_language_analysis(ALL_COMMENTS, ALL_OFFENSIVE_DATA):
     total = len(ALL_OFFENSIVE_DATA)
-    
+
     offensive_comments = {i: v for i, v in ALL_OFFENSIVE_DATA.items() if v['label'] == 'offensive'}
     non_offensive_comments = {i: v for i, v in ALL_OFFENSIVE_DATA.items() if v['label'] == 'non-offensive'}
 
@@ -176,60 +190,109 @@ def get_offensive_language_analysis(ALL_COMMENTS, ALL_OFFENSIVE_DATA):
         key=lambda x: x[1], reverse=True
     )[:5]
 
-    print(f"Total comments analyzed: {total}")
-    print(f"Offensive comments: {len(offensive_comments)} ({offensive_percent:.2f}%)")
-    print(f"Non-Offensive comments: {len(non_offensive_comments)} ({non_offensive_percent:.2f}%)\n")
+    
+    output_lines = []
+    output_lines.append(f"Total comments analyzed: {total}")
+    output_lines.append(f"Offensive comments: {len(offensive_comments)} ({offensive_percent:.2f}%)")
+    output_lines.append(f"Non-Offensive comments: {len(non_offensive_comments)} ({non_offensive_percent:.2f}%)\n")
 
-    print("Top 5 Offensive Comments:")
+    output_lines.append("Top 5 Offensive Comments:")
+    top_comments_cleaned = []
     for idx, prob, text in top_offensive:
-        print(f"{text}  -->  {prob:.2%} offensive")
+        output_lines.append(f"{text}  -->  {prob:.2%} offensive")
+        top_comments_cleaned.append({
+            "comment": text,
+            "confidence": round(prob, 4)
+        })
 
+    fig, ax = plt.subplots(figsize=(7, 7))
     labels = ['Offensive', 'Non-Offensive']
     sizes = [offensive_percent, non_offensive_percent]
     colors = ['#f39c12', '#3498db']
     explode = (0.1, 0)
 
-    plt.figure(figsize=(7, 7))
-    plt.pie(sizes, explode=explode, labels=labels, colors=colors,
-            autopct='%1.1f%%', shadow=True, startangle=140, textprops={'fontsize': 14})
-    plt.title('Offensive Language Detection Results', fontsize=16)
-    plt.axis('equal')
-    plt.tight_layout()
-    plt.show()
+    ax.pie(
+        sizes,
+        explode=explode,
+        labels=labels,
+        colors=colors,
+        autopct='%1.1f%%',
+        shadow=True,
+        startangle=140,
+        textprops={'fontsize': 14}
+    )
+    ax.set_title('Offensive Language Detection Results', fontsize=16)
+    ax.axis('equal')
 
+    buf = io.BytesIO()
+    plt.tight_layout()
+    plt.savefig(buf, format='PNG')
+    plt.close(fig)
+    buf.seek(0)
+    pie_chart_base64 = base64.b64encode(buf.read()).decode('utf-8')
+
+    return {
+        "print_output": "\n".join(output_lines),
+        "top_5_offensive_comments": top_comments_cleaned,
+        "pie_chart": pie_chart_base64
+    }
 
 
 def get_emoji_analysis(ALL_COMMENTS, ALL_EMOJI_DATA):
-    
     emojis = [v['label'] for v in ALL_EMOJI_DATA.values()]
     total = len(emojis)
     emoji_counts = Counter(emojis)
-    
     sorted_emojis = emoji_counts.most_common()
 
-    print(f"Total comments analyzed: {total}")
-    print("\nTop 5 Most Common Emojis:")
-    for emoji, count in sorted_emojis[:5]:
-        print(f"{emoji}  →  {count} comments ({(count / total) * 100:.2f}%)")
-
+    output_lines = []
+    output_lines.append(f"Total comments analyzed: {total}")
+    output_lines.append("\nTop 5 Most Common Emojis:")
     
+    top_5_emojis = []
+    for emoji, count in sorted_emojis[:5]:
+        percentage = (count / total) * 100
+        output_lines.append(f"{emoji}  →  {count} comments ({percentage:.2f}%)")
+        top_5_emojis.append({
+            "emoji": emoji,
+            "count": count,
+            "percentage": round(percentage, 2)
+        })
+
     labels = [f"{emoji}" for emoji, _ in sorted_emojis[:8]]
     sizes = [count for _, count in sorted_emojis[:8]]
     explode = [0.1 if i == 0 else 0 for i in range(len(labels))]
+    colors = plt.cm.tab20.colors[:len(labels)]
 
-    colors = plt.cm.tab20.colors[:len(labels)]  
+    fig, ax = plt.subplots(figsize=(8, 8))
+    ax.pie(
+        sizes,
+        labels=labels,
+        explode=explode,
+        autopct='%1.1f%%',
+        startangle=140,
+        shadow=True,
+        colors=colors,
+        textprops={'fontsize': 14}
+    )
+    ax.set_title("Emoji Sentiment Representation from Comments", fontsize=16)
+    ax.axis('equal')
 
-    plt.figure(figsize=(8, 8))
-    plt.pie(sizes, labels=labels, explode=explode, autopct='%1.1f%%',
-            startangle=140, shadow=True, colors=colors, textprops={'fontsize': 14})
-    plt.title("Emoji Sentiment Representation from Comments", fontsize=16)
-    plt.axis('equal')
+    buf = io.BytesIO()
     plt.tight_layout()
-    plt.show()
+    plt.savefig(buf, format='PNG')
+    plt.close(fig)
+    buf.seek(0)
+    pie_chart_base64 = base64.b64encode(buf.read()).decode('utf-8')
 
-    
     dominant_emoji = sorted_emojis[0][0] if sorted_emojis else None
-    print(f"\n🎯 Dominant Emoji for This Video: {dominant_emoji}")
+    output_lines.append(f"\n🎯 Dominant Emoji for This Video: {dominant_emoji}")
+
+    return {
+        "print_output": "\n".join(output_lines),
+        "top_5_emojis": top_5_emojis,
+        "dominant_emoji": dominant_emoji,
+        "pie_chart": pie_chart_base64
+    }
 
 
 def get_representative_comments(ALL_COMMENTS, num_clusters=None):
@@ -346,17 +409,18 @@ def query():
     for comment in REPRESENTATIVE_COMMENTS:
         REPRESENTATIVE_COMMENTS_ALL+="-  "+comment+"\n"
 
-    #ALL_SENTIMENT_DATA=get_sentiment(ALL_COMMENTS)
-    #ALL_OFFENSIVE_SPEECH_DATA = get_offensive_language_detection(ALL_COMMENTS)
-    #ALL_EMOJI_DETECTION_DATA=get_emoji(ALL_COMMENTS)
+    ALL_SENTIMENT_DATA=get_sentiment(ALL_COMMENTS)
+    ALL_OFFENSIVE_SPEECH_DATA = get_offensive_language_detection(ALL_COMMENTS)
+    ALL_EMOJI_DETECTION_DATA=get_emoji(ALL_COMMENTS)
 
+    WORDCLOUD_IMAGE=get_wordcloud(ALL_COMMENTS)
 
-    #get_wordcloud(ALL_COMMENTS)
+    SENTIMENT_ANALYSIS_DATA=get_sentiment_analysis(ALL_COMMENTS,ALL_SENTIMENT_DATA)
+    TOP_5_SENTIMENT_DATA=SENTIMENT_ANALYSIS_DATA["top_5_comments"]
+    OFFENSIVE_LANGUAGE_ANALYSIS=get_offensive_language_analysis(ALL_COMMENTS,ALL_OFFENSIVE_SPEECH_DATA)
+    EMOJI_ANALYSIS_DATA=get_emoji_analysis(ALL_COMMENTS,ALL_EMOJI_DETECTION_DATA)
 
-    #TOP_5_SENTIMENT_DATA=get_sentiment_analysis(ALL_COMMENTS,ALL_SENTIMENT_DATA)
-    #comments_summarizer_by_llm(TOP_5_SENTIMENT_DATA)
-    #get_offensive_language_analysis(ALL_COMMENTS,ALL_OFFENSIVE_SPEECH_DATA)
-    #get_emoji_analysis(ALL_COMMENTS,ALL_EMOJI_DETECTION_DATA)
+    LLM_OUTPUT=comments_summarizer_by_llm(TOP_5_SENTIMENT_DATA)
 
     system_message_new = SystemMessage(
         content= f"""
@@ -378,7 +442,23 @@ def query():
     )
     CHAT_HISTORY.append(system_message_new)
 
-    return jsonify({"message": f"This is a sample API response for query! {video_id}"})
+    RESPONSE_DICT = {}
+    RESPONSE_DICT["word_cloud"]=WORDCLOUD_IMAGE
+    RESPONSE_DICT["sentiment_output"]=SENTIMENT_ANALYSIS_DATA["print_output"]
+    RESPONSE_DICT["sentiment_graph"]=SENTIMENT_ANALYSIS_DATA["pie_chart"]
+    RESPONSE_DICT["offensive_language_output"]=OFFENSIVE_LANGUAGE_ANALYSIS["print_output"]
+    RESPONSE_DICT["offensive_language_graph"]=OFFENSIVE_LANGUAGE_ANALYSIS["pie_chart"]
+    RESPONSE_DICT["emoji_output"]=EMOJI_ANALYSIS_DATA["print_output"]
+    RESPONSE_DICT["emoji_graph"]=EMOJI_ANALYSIS_DATA["pie_chart"]
+    RESPONSE_DICT["llm_output"]=LLM_OUTPUT
+
+
+    for k,v in RESPONSE_DICT.items():
+        print(k,"-----")
+        print(v)
+        print("\n\n")
+
+    return jsonify(RESPONSE_DICT)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)  
