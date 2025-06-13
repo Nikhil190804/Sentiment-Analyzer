@@ -1,10 +1,12 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 const Main = ({ onSubmit }) => {
   const [url, setUrl] = useState("");
+  const navigate = useNavigate(); 
 
   const handleClick = () => {
-    onSubmit(url);
+    onSubmit(url, navigate); 
   };
 
   return (
@@ -23,4 +25,4 @@ const Main = ({ onSubmit }) => {
   );
 };
 
-export default Main;
+export default Main

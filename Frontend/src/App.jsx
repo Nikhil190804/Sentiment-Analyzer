@@ -4,9 +4,13 @@ import Header from "./components/Header";
 import Main from "./components/Main";
 import Footer from "./components/Footer";
 import Toast from "./components/Toast";
+import ResultsPage from "./components/ResultsPage";
+import {Routes, Route} from "react-router-dom";
+
 
 function App() {
   const [toastMessage, setToastMessage] = useState("");
+  const [analysisData, setAnalysisData] = useState(null);
 
   const showToast = (message) => {
     setToastMessage(message);
@@ -18,30 +22,38 @@ function App() {
     return url !== "" && url.startsWith("https://") && url.length >= 10;
   };
 
-  const handleSubmit = (videoUrl) => {
+  const handleSubmit = (videoUrl, navigate) => {
     if (!validateUrl(videoUrl)) {
       showToast("Invalid URL!!!");
       return;
     }
-
-    fetch("https://sentiment-analyzer-5w4g.onrender.com/query", {
+    fetch("http://127.0.0.1:8080/query", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ yt_url: videoUrl }),
     })
       .then((res) => res.json())
-      .then((data) => console.log("Success:", data))
-      .catch((error) => console.error("Error:", error));
+      .then((data) => {
+        setAnalysisData(data);
+        navigate("/results");
+      })
+      .catch((error) => {
+        console.error("Error:", error);
+        showToast("Error occurred during analysis.");
+      });
   };
 
   return (
     <div className="App">
       <Header />
       <Toast message={toastMessage} />
-      <Main onSubmit={handleSubmit} />
+      <Routes>
+        <Route path="/" element={<Main onSubmit={handleSubmit} />} />
+        <Route path="/results" element={<ResultsPage data={analysisData} />} />
+      </Routes>
       <Footer />
     </div>
   );
 }
 
-export default App;
+export default App
