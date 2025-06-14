@@ -6,6 +6,8 @@ import os
 import requests
 import tweetnlp
 from wordcloud import WordCloud,STOPWORDS
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from collections import defaultdict,Counter
 from sentence_transformers import SentenceTransformer
@@ -17,6 +19,7 @@ from langchain_core.messages import SystemMessage,HumanMessage,AIMessage
 import io
 import base64
 
+plt.rcParams['font.family'] = 'Segoe UI Emoji'
 app = Flask(__name__)
 CORS(app)
 load_dotenv(override=True)
@@ -453,10 +456,10 @@ def query():
     RESPONSE_DICT["llm_output"]=LLM_OUTPUT
 
 
-    for k,v in RESPONSE_DICT.items():
-        print(k,"-----")
-        print(v)
-        print("\n\n")
+    #for k,v in RESPONSE_DICT.items():
+    #    print(k,"-----")
+    #    print(v)
+    #    print("\n\n")
 
     return jsonify(RESPONSE_DICT)
 
