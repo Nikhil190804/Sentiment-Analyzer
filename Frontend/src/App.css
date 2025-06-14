@@ -114,3 +114,14 @@ button:hover {
   padding: 10px;
   white-space: pre-wrap;
 }
+
+.loader-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 40vh;
+  text-align: center;
+  color: #333;
+  font-size: 16px;
+}

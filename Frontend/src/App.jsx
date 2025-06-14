@@ -6,11 +6,12 @@ import Footer from "./components/Footer";
 import Toast from "./components/Toast";
 import ResultsPage from "./components/ResultsPage";
 import {Routes, Route} from "react-router-dom";
-
+import ClipLoader from "react-spinners/ClipLoader";
 
 function App() {
   const [toastMessage, setToastMessage] = useState("");
   const [analysisData, setAnalysisData] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   const showToast = (message) => {
     setToastMessage(message);
@@ -27,6 +28,7 @@ function App() {
       showToast("Invalid URL!!!");
       return;
     }
+    setIsLoading(true);
     fetch("http://127.0.0.1:8080/query", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -34,10 +36,12 @@ function App() {
     })
       .then((res) => res.json())
       .then((data) => {
+        setIsLoading(false);
         setAnalysisData(data);
         navigate("/results");
       })
       .catch((error) => {
+        setIsLoading(false);
         console.error("Error:", error);
         showToast("Error occurred during analysis.");
       });
@@ -47,10 +51,18 @@ function App() {
     <div className="App">
       <Header />
       <Toast message={toastMessage} />
-      <Routes>
-        <Route path="/" element={<Main onSubmit={handleSubmit} />} />
-        <Route path="/results" element={<ResultsPage data={analysisData} />} />
-      </Routes>
+
+      {isLoading ? (
+        <div className="loader-wrapper">
+          <ClipLoader size={50} color="#007bff" />
+          <p>Analyzing video comments...</p>
+        </div>
+      ) : (
+        <Routes>
+          <Route path="/" element={<Main onSubmit={handleSubmit} />} />
+          <Route path="/results" element={<ResultsPage data={analysisData} />} />
+        </Routes>
+      )}
       <Footer />
     </div>
   );
